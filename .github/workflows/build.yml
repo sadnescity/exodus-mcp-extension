@@ -97,6 +97,7 @@ jobs:
 
       - name: Package release zip
         run: |
+          cp dist/bin/Release/ExodusMCP.dll dist/ExodusMCP.dll
           cd dist
           zip -r ../ExodusMCP-${{ github.ref_name }}.zip ExodusMCP.dll README.md
 
