@@ -3,10 +3,9 @@ name: Build & Release
 on:
   push:
     branches: [main, master]
+    tags: ['v*']
   pull_request:
     branches: [main, master]
-  release:
-    types: [published]
 
 env:
   EXODUS_REPO: OmbraRD/Exodus
@@ -30,12 +29,14 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          if ("${{ github.event_name }}" -eq "release") {
-            $version = "${{ github.event.release.tag_name }}" -replace '^v', ''
+          $ref = "${{ github.ref }}"
+          if ($ref -match '^refs/tags/v(.+)$') {
+            $version = $Matches[1]
           } else {
             $version = ""
           }
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "IS_RELEASE=$( if ($version) { 'true' } else { 'false' } )" >> $env:GITHUB_OUTPUT
           echo "Building version: $( if ($version) { $version } else { '(default from source)' } )"
 
       - name: Checkout Exodus
@@ -82,7 +83,7 @@ jobs:
 
   release:
     needs: build
-    if: github.event_name == 'release'
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -97,9 +98,10 @@ jobs:
       - name: Package release zip
         run: |
           cd dist
-          zip -r ../ExodusMCP-${{ github.event.release.tag_name }}.zip ExodusMCP.dll README.md
+          zip -r ../ExodusMCP-${{ github.ref_name }}.zip ExodusMCP.dll README.md
 
-      - name: Upload to release
+      - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: ExodusMCP-${{ github.event.release.tag_name }}.zip
+          generate_release_notes: true
+          files: ExodusMCP-${{ github.ref_name }}.zip
