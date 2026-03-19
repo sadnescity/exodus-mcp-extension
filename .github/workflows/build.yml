@@ -33,10 +33,10 @@ jobs:
           if ("${{ github.event_name }}" -eq "release") {
             $version = "${{ github.event.release.tag_name }}" -replace '^v', ''
           } else {
-            $version = "0.0.0-dev"
+            $version = ""
           }
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-          echo "Building version: $version"
+          echo "Building version: $( if ($version) { $version } else { '(default from source)' } )"
 
       - name: Checkout Exodus
         uses: actions/checkout@v4
