@@ -1,0 +1,28 @@
+# Visual Studio files
+.vs/
+*.user
+*.ncb
+*.sdf
+*.opensdf
+*.suo
+*.VC.db
+*.VC.opendb
+*.lastbuildstate
+*.log
+*.aps
+*.APS
+
+# Build output
+bin/
+obj/
+x64/
+Win32/
+Debug/
+Release/
+*.dll
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.obj
+*.idb

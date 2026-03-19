@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ExodusDir Condition="'$(ExodusDir)' == ''">$(SolutionDir)..\Exodus\</ExodusDir>
+    <MCPVersion Condition="'$(MCPVersion)' == ''"></MCPVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</ProjectGuid>
+    <RootNamespace>ExodusMCP</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(SolutionDir)bin\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)obj\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(SolutionDir)bin\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)obj\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ExodusDir)Support Libraries;$(ExodusDir)ExodusSDK;$(ExodusDir)Devices;$(ExodusDir)Third\expat\libexpat\expat\lib;$(ExodusDir)Third\zlib\zlib-1.2.8;$(ExodusDir)Third\libpng\lpng1612;$(ExodusDir)Third\libpng;$(ExodusDir)Third\libjpeg\jpeg-9a;$(ExodusDir)Third\libjpeg;$(ExodusDir)Third\libtiff\tiff-4.0.9\libtiff;$(ExodusDir)Third\libtiff;$(SolutionDir)third\cpp-httplib;$(SolutionDir)third\nlohmann-json\include;$(SolutionDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>EX_DLLINTERFACE;WIN32;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(MCPVersion)' != ''">EXODUS_MCP_VERSION="$(MCPVersion)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalLibraryDirectories>$(ExodusDir)x64\Output\Release\Extension;$(ExodusDir)x64\Output\Release\Processor;$(ExodusDir)x64\Output\Release\GenericAccess;$(ExodusDir)x64\Output\Release\WindowsSupport;$(ExodusDir)x64\Output\Release\Stream;$(ExodusDir)x64\Output\Release\HierarchicalStorage;$(ExodusDir)x64\Output\Release\Image;$(ExodusDir)Third\zlib\zlib-1.2.8;$(ExodusDir)Third\expat\libexpat\expat;$(ExodusDir)Third\libpng\lpng1612;$(ExodusDir)Third\libjpeg\jpeg-9a;$(ExodusDir)Third\libtiff\tiff-4.0.9;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>Extension.lib;Processor.lib;GenericAccess.lib;WindowsSupport.lib;Stream.lib;HierarchicalStorage.lib;Image.lib;Version.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ExodusDir)Support Libraries;$(ExodusDir)ExodusSDK;$(ExodusDir)Devices;$(ExodusDir)Third\expat\libexpat\expat\lib;$(ExodusDir)Third\zlib\zlib-1.2.8;$(ExodusDir)Third\libpng\lpng1612;$(ExodusDir)Third\libpng;$(ExodusDir)Third\libjpeg\jpeg-9a;$(ExodusDir)Third\libjpeg;$(ExodusDir)Third\libtiff\tiff-4.0.9\libtiff;$(ExodusDir)Third\libtiff;$(SolutionDir)third\cpp-httplib;$(SolutionDir)third\nlohmann-json\include;$(SolutionDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>EX_DLLINTERFACE;WIN32;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(MCPVersion)' != ''">EXODUS_MCP_VERSION="$(MCPVersion)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(ExodusDir)x64\Output\Debug\Extension;$(ExodusDir)x64\Output\Debug\Processor;$(ExodusDir)x64\Output\Debug\GenericAccess;$(ExodusDir)x64\Output\Debug\WindowsSupport;$(ExodusDir)x64\Output\Debug\Stream;$(ExodusDir)x64\Output\Debug\HierarchicalStorage;$(ExodusDir)x64\Output\Debug\Image;$(ExodusDir)Third\zlib\zlib-1.2.8;$(ExodusDir)Third\expat\libexpat\expat;$(ExodusDir)Third\libpng\lpng1612;$(ExodusDir)Third\libjpeg\jpeg-9a;$(ExodusDir)Third\libtiff\tiff-4.0.9;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>Extension.lib;Processor.lib;GenericAccess.lib;WindowsSupport.lib;Stream.lib;HierarchicalStorage.lib;Image.lib;Version.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="src\interface.cpp" />
+    <ClCompile Include="src\ExodusMCPExtension.cpp" />
+    <ClCompile Include="src\MCPServer.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\ExodusMCPExtension.h" />
+    <ClInclude Include="src\MCPServer.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

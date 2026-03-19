@@ -1,0 +1,98 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  release:
+    types: [published]
+
+env:
+  EXODUS_REPO: OmbraRD/Exodus
+  EXODUS_BRANCH: next
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        configuration: [Release]
+        platform: [x64]
+
+    steps:
+      - name: Checkout MCP extension
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Determine version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "release") {
+            $version = "${{ github.event.release.tag_name }}" -replace '^v', ''
+          } else {
+            $version = "0.0.0-dev"
+          }
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "Building version: $version"
+
+      - name: Checkout Exodus
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.EXODUS_REPO }}
+          ref: ${{ env.EXODUS_BRANCH }}
+          path: Exodus
+          submodules: recursive
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build Exodus third-party libraries
+        run: |
+          msbuild Exodus\ThirdPartyLibraries.sln `
+            /p:Configuration=${{ matrix.configuration }} `
+            /p:Platform=${{ matrix.platform }} `
+            /m
+
+      - name: Build Exodus SDK libraries
+        run: |
+          msbuild Exodus\Exodus.sln `
+            /p:Configuration=${{ matrix.configuration }} `
+            /p:Platform=${{ matrix.platform }} `
+            /t:Extension`;Processor`;GenericAccess`;WindowsSupport`;Stream`;HierarchicalStorage`;Image `
+            /m
+
+      - name: Build ExodusMCP extension
+        run: |
+          msbuild ExodusMCP.vcxproj `
+            /p:Configuration=${{ matrix.configuration }} `
+            /p:Platform=${{ matrix.platform }} `
+            /p:ExodusDir=${{ github.workspace }}\Exodus\ `
+            /p:MCPVersion=${{ steps.version.outputs.VERSION }} `
+            /m
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ExodusMCP-${{ matrix.platform }}-${{ matrix.configuration }}
+          path: bin/${{ matrix.configuration }}/ExodusMCP.dll
+
+  release:
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ExodusMCP-x64-Release
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ExodusMCP.dll
