@@ -47,7 +47,7 @@ All tools carry annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `read_cpu_registers` | `device` | Full register dump (M68000: D0-D7, A0-A7, PC, SR, SSP, USP) |
+| `read_cpu_registers` | `device` | Register dump (M68000: D0-D7, A0-A7, PC, SR, SSP, USP; other CPUs such as the Z80: PC only) |
 | `read_memory` | `device`, `address`, `length` | Read bytes from CPU address space (max 4096) |
 | `write_memory` | `device`, `address`, `data` | Write bytes to CPU address space |
 | `disassemble` | `device`, `address`, `count?` | Disassemble instructions (default 10) |
@@ -56,7 +56,7 @@ All tools carry annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `search_memory` | `device`, `hex`, `start?`, `end?` | Search for hex byte pattern (max 64 results) |
+| `search_memory` | `device`, `hex`, `start?`, `end?` | Search for hex byte pattern (max 64 results; `end` defaults to `$FFFFFF`) |
 
 ### Breakpoints (3)
 
@@ -99,7 +99,7 @@ No `device` parameter.
 |------|-----------|-------------|
 | `read_sprite_table` | — | Decode sprite attribute table (up to 80 sprites) |
 | `read_palette` | — | All 64 colors as 8-bit RGB |
-| `read_nametable` | `plane`, `row_start?`, `row_count?` | Decode plane nametable (a/b/window) |
+| `read_nametable` | `plane`, `row_start?`, `row_count?` | Decode plane nametable (a/b/window), 8 rows per call by default |
 | `read_vdp_state` | — | Full VDP configuration |
 
 ### Screenshot & Pixel Info (2)
@@ -122,7 +122,7 @@ All tools accept addresses as:
 | Motorola | `$FF0000` | Preferred for M68000 |
 | C-style | `0xFF0000` | |
 | Zilog | `FF0000h` | For Z80 |
-| Integer | `16711680` | Decimal |
+| Integer | `16711680` | Decimal (a bare number without `$`/`0x`/`h` is always decimal) |
 
 ## Architecture
 

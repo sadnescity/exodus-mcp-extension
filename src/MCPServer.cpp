@@ -95,7 +95,7 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "get_system_status";
-		tool["description"] = "Get the current system status (running/stopped, loaded modules)";
+		tool["description"] = "Get the current system status. Returns JSON with running (true/false) and modules (array of loaded module id and name)";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"] = json::object();
 		tools.push_back(tool);
@@ -103,7 +103,7 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "run_system";
-		tool["description"] = "Start/resume emulation";
+		tool["description"] = "Start/resume emulation. Returns JSON {\"status\": \"running\"}";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"] = json::object();
 		tools.push_back(tool);
@@ -111,7 +111,7 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "stop_system";
-		tool["description"] = "Pause emulation";
+		tool["description"] = "Pause emulation. Returns JSON {\"status\": \"stopped\"}";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"] = json::object();
 		tools.push_back(tool);
@@ -119,7 +119,7 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "list_devices";
-		tool["description"] = "List all loaded devices in the system";
+		tool["description"] = "List all loaded devices in the system. Returns JSON array of {class, instance}; pass the instance name as the device parameter of the CPU tools";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"] = json::object();
 		tools.push_back(tool);
@@ -129,7 +129,7 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "read_cpu_registers";
-		tool["description"] = "Read the program counter from a processor device";
+		tool["description"] = "Read processor registers as plain text. M68000: D0-D7, A0-A7, PC, SR, SSP, USP. Other processors (e.g. Z80): only the program counter (PC=$XXXXXX)";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["device"]["type"] = "string";
 		tool["inputSchema"]["properties"]["device"]["description"] = "Processor device instance name from list_devices(), e.g. \"Main 68000\" or \"Z80\"";
@@ -139,26 +139,26 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "read_memory";
-		tool["description"] = "Read bytes from a processor's memory address space. Returns hex byte string";
+		tool["description"] = "Read bytes from a processor's memory address space. Returns JSON with address, length and hex (space-separated bytes)";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["device"]["type"] = "string";
 		tool["inputSchema"]["properties"]["device"]["description"] = "Processor device instance name, e.g. \"Main 68000\" or \"Z80\"";
 		tool["inputSchema"]["properties"]["address"]["type"] = "string";
-		tool["inputSchema"]["properties"]["address"]["description"] = "Start address as hex string \"$FF0000\" or integer. M68000 range: $000000-$FFFFFF";
+		tool["inputSchema"]["properties"]["address"]["description"] = "Start address as hex string \"$FF0000\", \"0xFF0000\", \"FF0000h\" or decimal (a bare number without prefix/suffix is decimal). M68000 range: $000000-$FFFFFF, Z80: $0000-$FFFF";
 		tool["inputSchema"]["properties"]["length"]["type"] = "integer";
-		tool["inputSchema"]["properties"]["length"]["description"] = "Number of bytes to read (1-4096)";
+		tool["inputSchema"]["properties"]["length"]["description"] = "Number of bytes to read (max 4096, larger values are clamped)";
 		tool["inputSchema"]["required"] = json::array({"device", "address", "length"});
 		tools.push_back(tool);
 	}
 	{
 		json tool;
 		tool["name"] = "write_memory";
-		tool["description"] = "Write bytes to a processor's memory address space";
+		tool["description"] = "Write bytes to a processor's memory address space. Returns JSON with address and bytesWritten";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["device"]["type"] = "string";
 		tool["inputSchema"]["properties"]["device"]["description"] = "Processor device instance name, e.g. \"Main 68000\" or \"Z80\"";
 		tool["inputSchema"]["properties"]["address"]["type"] = "string";
-		tool["inputSchema"]["properties"]["address"]["description"] = "Start address as hex string \"$FF0000\" or integer";
+		tool["inputSchema"]["properties"]["address"]["description"] = "Start address as hex string \"$FF0000\", \"0xFF0000\", \"FF0000h\" or decimal (a bare number without prefix/suffix is decimal)";
 		tool["inputSchema"]["properties"]["data"]["type"] = "array";
 		tool["inputSchema"]["properties"]["data"]["items"]["type"] = "integer";
 		tool["inputSchema"]["properties"]["data"]["description"] = "Array of byte values 0-255, e.g. [0, 16, 255]";
@@ -168,12 +168,12 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "disassemble";
-		tool["description"] = "Disassemble CPU instructions starting at an address. Returns plain text with one instruction per line";
+		tool["description"] = "Disassemble CPU instructions starting at an address. Returns plain text with one instruction per line (address, mnemonic, operands); runs of invalid opcodes are collapsed into a \"; ... bytes skipped (not code)\" line";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["device"]["type"] = "string";
 		tool["inputSchema"]["properties"]["device"]["description"] = "Processor device instance name, e.g. \"Main 68000\" or \"Z80\"";
 		tool["inputSchema"]["properties"]["address"]["type"] = "string";
-		tool["inputSchema"]["properties"]["address"]["description"] = "Start address as hex string \"$000200\" or integer";
+		tool["inputSchema"]["properties"]["address"]["description"] = "Start address as hex string \"$000200\", \"0x000200\", \"000200h\" or decimal (a bare number without prefix/suffix is decimal)";
 		tool["inputSchema"]["properties"]["count"]["type"] = "integer";
 		tool["inputSchema"]["properties"]["count"]["description"] = "Number of instructions to disassemble (optional, default 10)";
 		tool["inputSchema"]["required"] = json::array({"device", "address"});
@@ -184,16 +184,16 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "search_memory";
-		tool["description"] = "Search a processor's memory space for a hex byte pattern. Returns list of matching addresses";
+		tool["description"] = "Search a processor's memory space for a hex byte pattern. Returns plain text: match count followed by one matching address per line (max 64 results), or \"No matches found\"";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["device"]["type"] = "string";
 		tool["inputSchema"]["properties"]["device"]["description"] = "Processor device instance name, e.g. \"Main 68000\"";
 		tool["inputSchema"]["properties"]["hex"]["type"] = "string";
-		tool["inputSchema"]["properties"]["hex"]["description"] = "Hex byte pattern to search for, e.g. \"00FF8000\" for bytes 00 FF 80 00. No spaces or $ prefix";
+		tool["inputSchema"]["properties"]["hex"]["description"] = "Hex byte pattern to search for, e.g. \"00FF8000\" for bytes 00 FF 80 00. Even number of hex digits, no spaces or $ prefix";
 		tool["inputSchema"]["properties"]["start"]["type"] = "string";
-		tool["inputSchema"]["properties"]["start"]["description"] = "Start address (optional, default \"$000000\")";
+		tool["inputSchema"]["properties"]["start"]["description"] = "Start address, same formats as the other address parameters (optional, default \"$000000\")";
 		tool["inputSchema"]["properties"]["end"]["type"] = "string";
-		tool["inputSchema"]["properties"]["end"]["description"] = "End address (optional, default \"$FFFFFF\" for M68000)";
+		tool["inputSchema"]["properties"]["end"]["description"] = "Last address searched, inclusive (optional, default \"$FFFFFF\" for every device: pass \"$FFFF\" for the Z80)";
 		tool["inputSchema"]["required"] = json::array({"device", "hex"});
 		tools.push_back(tool);
 	}
@@ -202,31 +202,31 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "set_breakpoint";
-		tool["description"] = "Set an execution breakpoint at an address on a processor device";
+		tool["description"] = "Set an execution breakpoint at an address on a processor device. Returns JSON with address and status";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["device"]["type"] = "string";
 		tool["inputSchema"]["properties"]["device"]["description"] = "Processor device instance name, e.g. \"Main 68000\" or \"Z80\"";
 		tool["inputSchema"]["properties"]["address"]["type"] = "string";
-		tool["inputSchema"]["properties"]["address"]["description"] = "Breakpoint address as hex string \"$000200\" or integer";
+		tool["inputSchema"]["properties"]["address"]["description"] = "Breakpoint address as hex string \"$000200\", \"0x000200\", \"000200h\" or decimal (a bare number without prefix/suffix is decimal)";
 		tool["inputSchema"]["required"] = json::array({"device", "address"});
 		tools.push_back(tool);
 	}
 	{
 		json tool;
 		tool["name"] = "remove_breakpoint";
-		tool["description"] = "Remove an execution breakpoint at an address";
+		tool["description"] = "Remove the execution breakpoint set at an address. Returns JSON with address and status; error if no breakpoint is set there";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["device"]["type"] = "string";
 		tool["inputSchema"]["properties"]["device"]["description"] = "Processor device instance name, e.g. \"Main 68000\" or \"Z80\"";
 		tool["inputSchema"]["properties"]["address"]["type"] = "string";
-		tool["inputSchema"]["properties"]["address"]["description"] = "Address of breakpoint to remove, as hex string \"$000200\" or integer";
+		tool["inputSchema"]["properties"]["address"]["description"] = "Address of breakpoint to remove, as hex string \"$000200\", \"0x000200\", \"000200h\" or decimal (a bare number without prefix/suffix is decimal)";
 		tool["inputSchema"]["required"] = json::array({"device", "address"});
 		tools.push_back(tool);
 	}
 	{
 		json tool;
 		tool["name"] = "list_breakpoints";
-		tool["description"] = "List all active breakpoints on a processor device";
+		tool["description"] = "List all breakpoints on a processor device. Returns JSON array of {address, enabled}";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["device"]["type"] = "string";
 		tool["inputSchema"]["properties"]["device"]["description"] = "Processor device instance name, e.g. \"Main 68000\" or \"Z80\"";
@@ -238,12 +238,12 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "set_watchpoint";
-		tool["description"] = "Set a memory watchpoint that breaks when an address range is read from or written to";
+		tool["description"] = "Set a memory watchpoint that breaks when an address range is read from and/or written to (default: writes only). Returns a plain text confirmation";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["device"]["type"] = "string";
 		tool["inputSchema"]["properties"]["device"]["description"] = "Processor device instance name, e.g. \"Main 68000\"";
 		tool["inputSchema"]["properties"]["address"]["type"] = "string";
-		tool["inputSchema"]["properties"]["address"]["description"] = "Start address as hex string \"$FF8E00\" or integer";
+		tool["inputSchema"]["properties"]["address"]["description"] = "Start address as hex string \"$FF8E00\", \"0xFF8E00\", \"FF8E00h\" or decimal (a bare number without prefix/suffix is decimal)";
 		tool["inputSchema"]["properties"]["size"]["type"] = "integer";
 		tool["inputSchema"]["properties"]["size"]["description"] = "Size of memory range in bytes (optional, default 1)";
 		tool["inputSchema"]["properties"]["read"]["type"] = "boolean";
@@ -256,19 +256,19 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "remove_watchpoint";
-		tool["description"] = "Remove a memory watchpoint at an address";
+		tool["description"] = "Remove the memory watchpoint whose range starts at an address. Returns a plain text confirmation; error if none starts there";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["device"]["type"] = "string";
 		tool["inputSchema"]["properties"]["device"]["description"] = "Processor device instance name, e.g. \"Main 68000\"";
 		tool["inputSchema"]["properties"]["address"]["type"] = "string";
-		tool["inputSchema"]["properties"]["address"]["description"] = "Address of watchpoint to remove, as hex string \"$FF8E00\" or integer";
+		tool["inputSchema"]["properties"]["address"]["description"] = "Start address of the watchpoint to remove, as hex string \"$FF8E00\", \"0xFF8E00\", \"FF8E00h\" or decimal (a bare number without prefix/suffix is decimal)";
 		tool["inputSchema"]["required"] = json::array({"device", "address"});
 		tools.push_back(tool);
 	}
 	{
 		json tool;
 		tool["name"] = "list_watchpoints";
-		tool["description"] = "List all active memory watchpoints on a processor device";
+		tool["description"] = "List all memory watchpoints on a processor device. Returns plain text, one per line: $start-$end, type (R, W or R/W), enabled/disabled";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["device"]["type"] = "string";
 		tool["inputSchema"]["properties"]["device"]["description"] = "Processor device instance name, e.g. \"Main 68000\"";
@@ -280,7 +280,7 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "step_device";
-		tool["description"] = "Execute a single instruction on a processor device. System must be stopped first";
+		tool["description"] = "Execute a single instruction on a processor device. System must be stopped first. Returns JSON with the new pc and status";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["device"]["type"] = "string";
 		tool["inputSchema"]["properties"]["device"]["description"] = "Processor device instance name, e.g. \"Main 68000\" or \"Z80\"";
@@ -292,43 +292,43 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "read_vram";
-		tool["description"] = "Read raw bytes from VDP VRAM (65536 bytes). Contains tile patterns, nametables, sprite table, H-scroll table. No device parameter needed";
+		tool["description"] = "Read raw bytes from VDP VRAM (65536 bytes). Contains tile patterns, nametables, sprite table, H-scroll table. Returns JSON with address, length and hex (space-separated bytes). No device parameter needed";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["address"]["type"] = "string";
-		tool["inputSchema"]["properties"]["address"]["description"] = "VRAM address as hex string \"$0000\" or integer. Range: $0000-$FFFF";
+		tool["inputSchema"]["properties"]["address"]["description"] = "VRAM address as hex string \"$0000\" or integer (bare numbers are decimal). Range: $0000-$FFFF";
 		tool["inputSchema"]["properties"]["length"]["type"] = "integer";
-		tool["inputSchema"]["properties"]["length"]["description"] = "Number of bytes to read (1-4096)";
+		tool["inputSchema"]["properties"]["length"]["description"] = "Number of bytes to read (clamped at the end of VRAM; keep it to a few KB per call to limit the response size)";
 		tool["inputSchema"]["required"] = json::array({"address", "length"});
 		tools.push_back(tool);
 	}
 	{
 		json tool;
 		tool["name"] = "read_cram";
-		tool["description"] = "Read raw bytes from VDP CRAM (128 bytes). Stores 64 colors as 9-bit BGR, 2 bytes each. No device parameter needed";
+		tool["description"] = "Read raw bytes from VDP CRAM (128 bytes). Stores 64 colors as 9-bit BGR, 2 bytes each. Returns JSON with address, length and hex (space-separated bytes). No device parameter needed";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["address"]["type"] = "string";
-		tool["inputSchema"]["properties"]["address"]["description"] = "CRAM address as hex string \"$00\" or integer. Range: $00-$7F";
+		tool["inputSchema"]["properties"]["address"]["description"] = "CRAM address as hex string \"$00\" or integer (bare numbers are decimal). Range: $00-$7F";
 		tool["inputSchema"]["properties"]["length"]["type"] = "integer";
-		tool["inputSchema"]["properties"]["length"]["description"] = "Number of bytes to read (1-128)";
+		tool["inputSchema"]["properties"]["length"]["description"] = "Number of bytes to read (1-128, clamped at the end of CRAM)";
 		tool["inputSchema"]["required"] = json::array({"address", "length"});
 		tools.push_back(tool);
 	}
 	{
 		json tool;
 		tool["name"] = "read_vsram";
-		tool["description"] = "Read raw bytes from VDP VSRAM (80 bytes). Stores per-column vertical scroll values, 2 bytes per column. No device parameter needed";
+		tool["description"] = "Read raw bytes from VDP VSRAM (80 bytes). Stores vertical scroll values, 2 bytes per entry, alternating plane A/plane B for each 2-cell (16px) column. Returns JSON with address, length and hex (space-separated bytes). No device parameter needed";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["address"]["type"] = "string";
-		tool["inputSchema"]["properties"]["address"]["description"] = "VSRAM address as hex string \"$00\" or integer. Range: $00-$4F";
+		tool["inputSchema"]["properties"]["address"]["description"] = "VSRAM address as hex string \"$00\" or integer (bare numbers are decimal). Range: $00-$4F";
 		tool["inputSchema"]["properties"]["length"]["type"] = "integer";
-		tool["inputSchema"]["properties"]["length"]["description"] = "Number of bytes to read (1-80)";
+		tool["inputSchema"]["properties"]["length"]["description"] = "Number of bytes to read (1-80, clamped at the end of VSRAM)";
 		tool["inputSchema"]["required"] = json::array({"address", "length"});
 		tools.push_back(tool);
 	}
 	{
 		json tool;
 		tool["name"] = "read_vdp_registers";
-		tool["description"] = "Read all 24 VDP registers as plain text (R00-R23 with $XX hex values). No device parameter needed";
+		tool["description"] = "Read all 24 VDP registers as plain text, one per line (\"R00 = $XX\" to \"R23 = $XX\"; register numbers are decimal). No device parameter needed";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"] = json::object();
 		tools.push_back(tool);
@@ -338,7 +338,7 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "read_sprite_table";
-		tool["description"] = "Decode the full sprite attribute table (up to 80 sprites). Returns plain text table with columns: index, x, y, width, height, pattern, palette, priority, hflip, vflip, link. Stops at end of sprite link chain. No device parameter needed";
+		tool["description"] = "Decode the sprite attribute table (up to 80 entries). Returns plain text table with columns: index, x, y, WxH, pattern, palette, priority, hflip, vflip, link. Values are raw: x/y include the +128 offset (screen x = x-128), W and H are size codes 0-3 (cells minus 1). Entries are listed in table order (not following the links) and the listing stops at the first entry after #0 whose link is 0. No device parameter needed";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"] = json::object();
 		tools.push_back(tool);
@@ -346,7 +346,7 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "read_palette";
-		tool["description"] = "Read all 64 VDP colors (4 rows x 16 colors) decoded to 8-bit RGB values and hex color codes. No device parameter needed";
+		tool["description"] = "Read all 64 VDP colors (4 palette lines x 16 colors) from CRAM, decoded to 8-bit RGB values and hex color codes (shadow/highlight not applied). Returns plain text. No device parameter needed";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"] = json::object();
 		tools.push_back(tool);
@@ -354,22 +354,22 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "read_nametable";
-		tool["description"] = "Decode a plane's nametable. Returns compact one-row-per-line format with tile index, palette, and flags per cell. Use row_start/row_count to page through large planes. No device parameter needed";
+		tool["description"] = "Decode a plane's nametable. Returns plain text: a header (plane, size in cells, base address, row range) followed by one line per cell with row, column, tile index, palette, priority, hflip and vflip. Returns 8 rows by default; use row_start/row_count to page through the plane. No device parameter needed";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["plane"]["type"] = "string";
 		tool["inputSchema"]["properties"]["plane"]["description"] = "Which plane to read. Must be one of: \"a\" (Plane A/Scroll A), \"b\" (Plane B/Scroll B), or \"window\" (Window plane)";
 		tool["inputSchema"]["properties"]["plane"]["enum"] = json::array({"a", "b", "window"});
 		tool["inputSchema"]["properties"]["row_start"]["type"] = "integer";
-		tool["inputSchema"]["properties"]["row_start"]["description"] = "First row to read (optional, default 0)";
+		tool["inputSchema"]["properties"]["row_start"]["description"] = "First row to read (optional, default 0; a value beyond the plane height falls back to 0)";
 		tool["inputSchema"]["properties"]["row_count"]["type"] = "integer";
-		tool["inputSchema"]["properties"]["row_count"]["description"] = "Number of rows to read (optional, default all rows)";
+		tool["inputSchema"]["properties"]["row_count"]["description"] = "Number of rows to read (optional, default 8; 0 also means 8; clamped to the plane height)";
 		tool["inputSchema"]["required"] = json::array({"plane"});
 		tools.push_back(tool);
 	}
 	{
 		json tool;
 		tool["name"] = "read_vdp_state";
-		tool["description"] = "Read the full decoded VDP configuration: display on/off, mode, resolution, plane size in cells and pixels, nametable base addresses (A/B/window/sprite/hscroll), scroll modes, background color, auto-increment, DMA status. No device parameter needed";
+		tool["description"] = "Read the decoded VDP configuration as plain text: display on/off, mode 4/5, resolution (H32/H40, V30), interlace, plane size in cells and pixels, nametable base addresses (A/B/window/sprite/hscroll), scroll modes, background color, auto-increment, DMA enable bit. No device parameter needed";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"] = json::object();
 		tools.push_back(tool);
@@ -379,7 +379,7 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "screenshot";
-		tool["description"] = "Capture the current VDP rendered frame as a base64-encoded PNG image. No device parameter needed";
+		tool["description"] = "Capture the current VDP rendered frame as a PNG saved to a temporary file (Windows temp folder). Returns plain text with the image size and the file path; the file is not deleted automatically. No device parameter needed";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"] = json::object();
 		tools.push_back(tool);
@@ -387,12 +387,12 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "query_pixel";
-		tool["description"] = "Get detailed rendering info for a screen pixel: which layer produced it (Sprite/LayerA/LayerB/Window/Background), tile mapping VRAM address, pattern row/column, palette, color, and sprite entry details. Coordinates are relative to the rendered frame (0,0 = top-left). No device parameter needed";
+		tool["description"] = "Get detailed rendering info for a screen pixel as plain text: which source produced it (Sprite/Layer A/Layer B/Window/Background, or Border/Blanking/CRAM Write), color, palette row/entry, H/V counters, shadow/highlight, tile mapping VRAM address and data, pattern row/column, and sprite entry details. Coordinates are relative to the rendered frame (0,0 = top-left). The first call enables the VDP pixel info buffer and returns an error: run the system for at least one frame, then call again. No device parameter needed";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["x"]["type"] = "integer";
-		tool["inputSchema"]["properties"]["x"]["description"] = "Horizontal pixel position (0 = left edge). H32 mode: 0-255, H40 mode: 0-319";
+		tool["inputSchema"]["properties"]["x"]["description"] = "Horizontal pixel position (0 = left edge). Typically 0-255 (H32) or 0-319 (H40); an out-of-range value returns an error with the actual frame size";
 		tool["inputSchema"]["properties"]["y"]["type"] = "integer";
-		tool["inputSchema"]["properties"]["y"]["description"] = "Vertical pixel position (0 = top edge). Typical range: 0-223 (V28) or 0-239 (V30)";
+		tool["inputSchema"]["properties"]["y"]["description"] = "Vertical pixel position (0 = top edge). Typically 0-223 (V28) or 0-239 (V30); an out-of-range value returns an error with the actual frame size";
 		tool["inputSchema"]["required"] = json::array({"x", "y"});
 		tools.push_back(tool);
 	}
@@ -787,12 +787,16 @@ std::string MCPServer::ToolSearchMemory(const std::string& deviceName, unsigned 
 	char line[32];
 	unsigned int found = 0;
 
-	for (unsigned int addr = startAddress; addr <= endAddress - (unsigned int)pattern.size() + 1; ++addr)
+	// 64-bit bounds: an end address below the pattern length, or end = $FFFFFFFF, must not wrap the loop counter
+	if (endAddress < startAddress || (unsigned long long)endAddress - startAddress + 1 < pattern.size())
+		return "No matches found";
+	const unsigned long long lastStart = (unsigned long long)endAddress - pattern.size() + 1;
+	for (unsigned long long addr = startAddress; addr <= lastStart; ++addr)
 	{
 		bool match = true;
 		for (size_t i = 0; i < pattern.size(); ++i)
 		{
-			if (processor->GetMemorySpaceByte(addr + (unsigned int)i) != pattern[i])
+			if (processor->GetMemorySpaceByte((unsigned int)addr + (unsigned int)i) != pattern[i])
 			{
 				match = false;
 				break;
@@ -800,7 +804,7 @@ std::string MCPServer::ToolSearchMemory(const std::string& deviceName, unsigned 
 		}
 		if (match)
 		{
-			snprintf(line, sizeof(line), "$%06X\n", addr);
+			snprintf(line, sizeof(line), "$%06X\n", (unsigned int)addr);
 			result += line;
 			++found;
 			if (found >= maxResults)
@@ -1175,6 +1179,12 @@ std::string MCPServer::ToolReadNametable(const std::string& plane, unsigned int 
 	unsigned int vsz = (vdp->GetRegisterData(0x10) >> 4) & 0x03;
 	unsigned int planeWidthCells = (hsz == 0) ? 32 : (hsz == 1) ? 64 : (hsz == 3) ? 128 : 32;
 	unsigned int planeHeightCells = (vsz == 0) ? 32 : (vsz == 1) ? 64 : (vsz == 3) ? 128 : 32;
+	if (planeName == "Window")
+	{
+		// The window mapping table ignores the scroll size register: 64 cells wide in H40 (RS1 set), 32 in H32, 32 rows
+		planeWidthCells = (vdp->GetRegisterData(0x0C) & 0x01) ? 64 : 32;
+		planeHeightCells = 32;
+	}
 
 	// Clamp row range (default to 8 rows to keep output manageable)
 	if (rowStart >= planeHeightCells)
