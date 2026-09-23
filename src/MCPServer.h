@@ -1,6 +1,8 @@
 #ifndef __MCPSERVER_H__
 #define __MCPSERVER_H__
 #include "ExtensionInterface/ExtensionInterface.pkg"
+#include "MCPProtocol.h"
+#include "nlohmann/json_fwd.hpp"
 #include <string>
 #include <functional>
 #include <map>
@@ -18,10 +20,9 @@ public:
 	void Stop();
 
 private:
-	// MCP protocol handlers
-	void HandleInitialize(const std::string& requestBody, std::string& responseBody);
-	void HandleToolsList(const std::string& requestBody, std::string& responseBody);
-	void HandleToolsCall(const std::string& requestBody, std::string& responseBody);
+	// MCP tool handlers (the protocol itself is handled by MCPProtocol)
+	nlohmann::json BuildToolList();
+	MCPProtocol::ToolCallOutcome CallTool(const std::string& toolName, const nlohmann::json& arguments);
 
 	// Tool implementations - System
 	std::string ToolGetSystemStatus();

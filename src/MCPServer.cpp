@@ -31,51 +31,46 @@ void MCPServer::Run()
 {
 	_httpServer = std::make_unique<httplib::Server>();
 
+	MCPProtocol::ServerInfo serverInfo;
+	serverInfo.name = "exodus-mcp";
+#ifdef EXODUS_MCP_VERSION
+	serverInfo.version = EXODUS_MCP_VERSION;
+#else
+	serverInfo.version = "1.0.0";
+#endif
+	serverInfo.instructions = "Debugging and reverse engineering tools for the Sega Mega Drive/Genesis running in the Exodus emulator. Call list_devices first to get processor device names for the CPU tools; VDP tools need no device.";
+
+	MCPProtocol::Handlers handlers;
+	handlers.listTools = [this]() { return BuildToolList(); };
+	handlers.callTool = [this](const std::string& name, const json& args) { return CallTool(name, args); };
+
 	// MCP Streamable HTTP endpoint
-	_httpServer->Post("/mcp", [this](const httplib::Request& req, httplib::Response& res)
+	_httpServer->Post("/mcp", [serverInfo, handlers](const httplib::Request& req, httplib::Response& res)
 	{
-		std::string responseBody;
-		json request;
-		try
+		auto getHeader = [&req](const std::string& name, std::string& value) -> bool
 		{
-			request = json::parse(req.body);
-		}
-		catch (...)
-		{
-			json error;
-			error["jsonrpc"] = "2.0";
-			error["error"]["code"] = -32700;
-			error["error"]["message"] = "Parse error";
-			error["id"] = nullptr;
-			res.set_content(error.dump(), "application/json");
-			return;
-		}
+			if (!req.has_header(name))
+				return false;
+			value = req.get_header_value(name);
+			return true;
+		};
 
-		std::string method = request.value("method", "");
-		if (method == "initialize")
+		MCPProtocol::HttpReply reply = MCPProtocol::HandlePost(req.body, getHeader, serverInfo, handlers);
+		res.status = reply.status;
+		if (!reply.body.empty())
 		{
-			HandleInitialize(req.body, responseBody);
+			res.set_content(reply.body, reply.contentType.c_str());
 		}
-		else if (method == "tools/list")
-		{
-			HandleToolsList(req.body, responseBody);
-		}
-		else if (method == "tools/call")
-		{
-			HandleToolsCall(req.body, responseBody);
-		}
-		else
-		{
-			json error;
-			error["jsonrpc"] = "2.0";
-			error["error"]["code"] = -32601;
-			error["error"]["message"] = "Method not found";
-			error["id"] = request.value("id", json(nullptr));
-			responseBody = error.dump();
-		}
-
-		res.set_content(responseBody, "application/json");
 	});
+
+	// No standalone SSE stream and no sessions to terminate
+	auto methodNotAllowed = [](const httplib::Request& req, httplib::Response& res)
+	{
+		res.status = 405;
+		res.set_header("Allow", "POST");
+	};
+	_httpServer->Get("/mcp", methodNotAllowed);
+	_httpServer->Delete("/mcp", methodNotAllowed);
 
 	_httpServer->listen("127.0.0.1", _port);
 }
@@ -90,33 +85,10 @@ void MCPServer::Stop()
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-// MCP protocol handlers
+// MCP tool handlers
 //----------------------------------------------------------------------------------------------------------------------
-void MCPServer::HandleInitialize(const std::string& requestBody, std::string& responseBody)
+json MCPServer::BuildToolList()
 {
-	json request = json::parse(requestBody);
-	json response;
-	response["jsonrpc"] = "2.0";
-	response["id"] = request.value("id", json(nullptr));
-	response["result"]["protocolVersion"] = "2024-11-05";
-	response["result"]["capabilities"]["tools"] = json::object();
-	response["result"]["serverInfo"]["name"] = "exodus-mcp";
-#ifdef EXODUS_MCP_VERSION
-	response["result"]["serverInfo"]["version"] = EXODUS_MCP_VERSION;
-#else
-	response["result"]["serverInfo"]["version"] = "1.0.0";
-#endif
-	responseBody = response.dump();
-}
-
-//----------------------------------------------------------------------------------------------------------------------
-void MCPServer::HandleToolsList(const std::string& requestBody, std::string& responseBody)
-{
-	json request = json::parse(requestBody);
-	json response;
-	response["jsonrpc"] = "2.0";
-	response["id"] = request.value("id", json(nullptr));
-
 	json tools = json::array();
 
 	// System tools
@@ -425,20 +397,46 @@ void MCPServer::HandleToolsList(const std::string& requestBody, std::string& res
 		tools.push_back(tool);
 	}
 
-	response["result"]["tools"] = tools;
-	responseBody = response.dump();
+	// Tool annotations (behavior hints for clients). All tools act only on the local emulator: openWorldHint is false.
+	struct ToolHints { const char* name; bool readOnly; bool destructive; bool idempotent; };
+	static const ToolHints toolHints[] = {
+		{ "run_system",        false, false, true  },
+		{ "stop_system",       false, false, true  },
+		{ "write_memory",      false, true,  true  },
+		{ "set_breakpoint",    false, false, true  },
+		{ "remove_breakpoint", false, true,  true  },
+		{ "set_watchpoint",    false, false, true  },
+		{ "remove_watchpoint", false, true,  true  },
+		{ "step_device",       false, false, false },
+		{ "query_pixel",       false, false, true  }, // Enables the VDP pixel info buffer on first call
+	};
+	for (json& tool : tools)
+	{
+		json annotations;
+		annotations["readOnlyHint"] = true;
+		annotations["openWorldHint"] = false;
+		for (const ToolHints& hints : toolHints)
+		{
+			if (tool["name"] == hints.name)
+			{
+				annotations["readOnlyHint"] = hints.readOnly;
+				annotations["destructiveHint"] = hints.destructive;
+				annotations["idempotentHint"] = hints.idempotent;
+				break;
+			}
+		}
+		tool["annotations"] = annotations;
+	}
+
+	return tools;
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-void MCPServer::HandleToolsCall(const std::string& requestBody, std::string& responseBody)
+MCPProtocol::ToolCallOutcome MCPServer::CallTool(const std::string& toolName, const json& arguments)
 {
-	json request = json::parse(requestBody);
-	json response;
-	response["jsonrpc"] = "2.0";
-	response["id"] = request.value("id", json(nullptr));
-
-	std::string toolName = request["params"]["name"].get<std::string>();
-	json args = request["params"].value("arguments", json::object());
+	// Mutable copy: operator[] on a missing key must insert null (so get<>() throws a reportable error) rather than
+	// hit the undefined behavior of const operator[]
+	json args = arguments;
 
 	// Helper: extract address from JSON value (accepts string "$FF0000", "0xFF0000", "FF0000h" or integer)
 	auto getAddr = [](const json& val) -> unsigned int {
@@ -547,30 +545,15 @@ void MCPServer::HandleToolsCall(const std::string& requestBody, std::string& res
 		}
 		else
 		{
-			response["error"]["code"] = -32602;
-			response["error"]["message"] = "Unknown tool: " + toolName;
-			responseBody = response.dump();
-			return;
+			return MCPProtocol::ToolCallOutcome{ MCPProtocol::ToolCallStatus::UnknownTool, "" };
 		}
 	}
 	catch (const std::exception& ex)
 	{
-		response["result"]["content"] = json::array();
-		json contentItem;
-		contentItem["type"] = "text";
-		contentItem["text"] = std::string("Error: ") + ex.what();
-		response["result"]["content"].push_back(contentItem);
-		response["result"]["isError"] = true;
-		responseBody = response.dump();
-		return;
+		return MCPProtocol::ToolCallOutcome{ MCPProtocol::ToolCallStatus::ToolError, ex.what() };
 	}
 
-	response["result"]["content"] = json::array();
-	json contentItem;
-	contentItem["type"] = "text";
-	contentItem["text"] = resultText;
-	response["result"]["content"].push_back(contentItem);
-	responseBody = response.dump();
+	return MCPProtocol::ToolCallOutcome{ MCPProtocol::ToolCallStatus::Success, resultText };
 }
 
 //----------------------------------------------------------------------------------------------------------------------

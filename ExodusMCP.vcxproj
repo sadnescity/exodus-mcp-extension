@@ -89,10 +89,12 @@
   <ItemGroup>
     <ClCompile Include="src\interface.cpp" />
     <ClCompile Include="src\ExodusMCPExtension.cpp" />
+    <ClCompile Include="src\MCPProtocol.cpp" />
     <ClCompile Include="src\MCPServer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\ExodusMCPExtension.h" />
+    <ClInclude Include="src\MCPProtocol.h" />
     <ClInclude Include="src\MCPServer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
