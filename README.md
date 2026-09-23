@@ -11,8 +11,21 @@ MCP (Model Context Protocol) server extension for the [Exodus Emulation Platform
 ## Connection
 
 - **Endpoint:** `POST http://localhost:8600/mcp`
-- **Protocol:** JSON-RPC 2.0 (MCP Streamable HTTP, protocol version `2024-11-05`)
-- **Binding:** localhost only
+- **Protocol:** JSON-RPC 2.0 over MCP Streamable HTTP, stateless (no sessions, JSON responses only)
+- **Binding:** localhost only; requests with a non-local `Origin` header are rejected (403)
+
+### Protocol versions
+
+The server is dual-era: it speaks the current stateless MCP revision and keeps working with handshake-based clients.
+
+| Revision | How the client connects |
+|----------|-------------------------|
+| `2026-07-28` | No handshake. Every request carries `io.modelcontextprotocol/protocolVersion` and `io.modelcontextprotocol/clientCapabilities` in `params._meta`, plus the `MCP-Protocol-Version`, `Mcp-Method` and (for `tools/call`) `Mcp-Name` headers. `server/discover` returns the supported versions, capabilities and server info. |
+| `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05` | `initialize` handshake (the server echoes the requested version if supported, otherwise answers `2025-11-25`), then `tools/list` / `tools/call` / `ping`. |
+
+Errors follow the spec: an unsupported version gets `400` with `UnsupportedProtocolVersionError` (`-32022`, listing the supported versions), header/body mismatches get `400` with `HeaderMismatch` (`-32020`), unknown methods on modern requests get `404` with `-32601`. Notifications and client responses get `202 Accepted`. `GET` and `DELETE` on `/mcp` return `405` (there is no standalone SSE stream and no session to terminate).
+
+All tools carry annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint: false`) so clients can tell inspection tools from ones that change emulator state.
 
 ## Tools (26)
 
@@ -115,8 +128,9 @@ All tools accept addresses as:
 
 ```
 ExodusMCPExtension.cpp    Extension lifecycle, server thread, settings
-MCPServer.cpp             HTTP server, MCP protocol, all 26 tool implementations
+MCPServer.cpp             HTTP server wiring, tool list, all 26 tool implementations
 MCPServer.h               Class definition
+MCPProtocol.cpp/.h        MCP protocol and Streamable HTTP rules (versions, headers, JSON-RPC), no Exodus dependency
 interface.cpp             DLL exports
 ```
 
@@ -235,7 +249,7 @@ To build with a specific version locally:
 msbuild ExodusMCP.vcxproj /p:Configuration=Release /p:Platform=x64 /p:MCPVersion=1.2.3
 ```
 
-The version is reported in the MCP `initialize` response under `serverInfo.version`.
+The version is reported as `serverInfo.version` in the `initialize` response (handshake clients) and as `_meta["io.modelcontextprotocol/serverInfo"].version` in every `2026-07-28` result, including `server/discover`.
 
 ## Configuration
 
