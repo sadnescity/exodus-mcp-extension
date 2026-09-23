@@ -3,11 +3,13 @@
 #include "nlohmann/json.hpp"
 
 #include "MCPServer.h"
+#include "DebugLogic.h"
 #include "Processor/Processor.pkg"
 #include "315-5313/IS315_5313.h"
 #include "M68000/IM68000.h"
 #include "Image/Image.pkg"
 #include "Stream/Stream.pkg"
+#include <algorithm>
 
 using json = nlohmann::json;
 
@@ -168,7 +170,7 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "disassemble";
-		tool["description"] = "Disassemble CPU instructions starting at an address. Returns plain text with one instruction per line (address, mnemonic, operands); runs of invalid opcodes are collapsed into a \"; ... bytes skipped (not code)\" line";
+		tool["description"] = "Disassemble CPU instructions starting at an address. Returns plain text with one instruction per line (address, mnemonic, operands); runs of invalid opcodes are collapsed into a \"; ... bytes skipped (not code)\" line, scanned in steps of the minimum opcode size (2 bytes on the 68000, 1 on the Z80). A run longer than 256 bytes, or one that reaches the end of the address space, ends the listing with a \"; stopped: ...\" line";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"]["device"]["type"] = "string";
 		tool["inputSchema"]["properties"]["device"]["description"] = "Processor device instance name, e.g. \"Main 68000\" or \"Z80\"";
@@ -338,7 +340,7 @@ json MCPServer::BuildToolList()
 	{
 		json tool;
 		tool["name"] = "read_sprite_table";
-		tool["description"] = "Decode the sprite attribute table (up to 80 entries). Returns plain text table with columns: index, x, y, WxH, pattern, palette, priority, hflip, vflip, link. Values are raw: x/y include the +128 offset (screen x = x-128), W and H are size codes 0-3 (cells minus 1). Entries are listed in table order (not following the links) and the listing stops at the first entry after #0 whose link is 0. No device parameter needed";
+		tool["description"] = "Decode the sprite list the way the VDP walks it: start at sprite 0 and follow the link fields until a sprite with link 0, a link outside the table, or the maximum sprite count for the mode (80 in H40, 64 in H32); a link back to a sprite already listed stops the walk (loop). Returns plain text: a header (sprite count, mode, table base), then one line per sprite in link order with columns: # (position in the list), idx (table index), x, y, WxH, pattern, palette, priority, hflip, vflip, link, and a final line saying why the list ended. Values are raw: x/y include the +128 offset (screen x = x-128), W and H are size codes 0-3 (cells minus 1). No device parameter needed";
 		tool["inputSchema"]["type"] = "object";
 		tool["inputSchema"]["properties"] = json::object();
 		tools.push_back(tool);
@@ -731,21 +733,34 @@ std::string MCPServer::ToolDisassemble(const std::string& deviceName, unsigned i
 
 		if (!opcodeInfo.GetIsValidOpcode() || opcodeInfo.GetOpcodeSize() == 0)
 		{
-			// Skip non-code region, count how many bytes we skip
+			// Skip a non-code region in steps of the processor's minimum opcode size (2 bytes on the 68000, 1 on the
+			// Z80). The run is bounded: it stops at the end of the address space or after MaxSkipBytes, and in both
+			// cases the disassembly ends there.
+			const unsigned int MaxSkipBytes = 256;
 			unsigned int skipStart = currentAddress;
-			while (instructionsEmitted < count)
-			{
-				currentAddress += 2;
-				OpcodeInfo nextInfo;
-				if (!processor->GetOpcodeInfo(currentAddress, nextInfo))
-					break;
-				if (nextInfo.GetIsValidOpcode() && nextInfo.GetOpcodeSize() > 0)
-					break;
-			}
+			DebugLogic::SkipResult skip = DebugLogic::SkipNonCode(currentAddress, processor->GetMinimumOpcodeByteSize(),
+				processor->GetAddressBusMask(), MaxSkipBytes, [processor](unsigned int location) -> int {
+					OpcodeInfo nextInfo;
+					if (!processor->GetOpcodeInfo(location, nextInfo))
+						return -1;
+					return (nextInfo.GetIsValidOpcode() && nextInfo.GetOpcodeSize() > 0) ? 1 : 0;
+				});
+			currentAddress = skip.endAddress;
 			char line[128];
 			snprintf(line, sizeof(line), "         ; $%06X-$%06X: %u bytes skipped (not code)\n",
 				skipStart, currentAddress - 1, currentAddress - skipStart);
 			result += line;
+			if (skip.stop == DebugLogic::SkipStop::Limit)
+			{
+				snprintf(line, sizeof(line), "         ; stopped: no valid instruction within %u bytes\n", MaxSkipBytes);
+				result += line;
+				break;
+			}
+			if (skip.stop == DebugLogic::SkipStop::EndOfSpace)
+			{
+				result += "         ; stopped: end of address space\n";
+				break;
+			}
 			continue;
 		}
 
@@ -837,13 +852,18 @@ std::string MCPServer::ToolSetBreakpoint(const std::string& deviceName, unsigned
 		throw std::runtime_error("Device is not a processor: " + deviceName);
 
 	IBreakpoint* bp = processor->CreateBreakpoint();
-	if (processor->LockBreakpoint(bp))
+	if (!bp)
+		throw std::runtime_error("Failed to create breakpoint on " + deviceName);
+	if (!processor->LockBreakpoint(bp))
 	{
-		bp->SetLocationConditionData1(address);
-		bp->SetName(bp->GenerateName());
-		bp->SetEnabled(true);
-		processor->UnlockBreakpoint(bp);
+		// The new breakpoint could not be configured: remove it rather than leave a disabled entry behind
+		processor->DeleteBreakpoint(bp);
+		throw std::runtime_error("Failed to set breakpoint: could not lock the new breakpoint on " + deviceName);
 	}
+	bp->SetLocationConditionData1(address);
+	bp->SetName(bp->GenerateName());
+	bp->SetEnabled(true);
+	processor->UnlockBreakpoint(bp);
 
 	char addrStr[16];
 	snprintf(addrStr, sizeof(addrStr), "$%06X", address);
@@ -870,6 +890,9 @@ std::string MCPServer::ToolRemoveBreakpoint(const std::string& deviceName, unsig
 		if (bp->GetLocationConditionData1() == address)
 		{
 			processor->DeleteBreakpoint(bp);
+			std::list<IBreakpoint*> remaining = processor->GetBreakpointList();
+			if (std::find(remaining.begin(), remaining.end(), bp) != remaining.end())
+				throw std::runtime_error("Failed to remove breakpoint: it is still present on " + deviceName);
 			char addrStr[16];
 			snprintf(addrStr, sizeof(addrStr), "$%06X", address);
 			json result;
@@ -920,19 +943,27 @@ std::string MCPServer::ToolSetWatchpoint(const std::string& deviceName, unsigned
 	if (!processor)
 		throw std::runtime_error("Device is not a processor: " + deviceName);
 
+	if (size == 0)
+		throw std::runtime_error("Watchpoint size must be at least 1 byte");
+
 	IWatchpoint* wp = processor->CreateWatchpoint();
-	if (processor->LockWatchpoint(wp))
+	if (!wp)
+		throw std::runtime_error("Failed to create watchpoint on " + deviceName);
+	if (!processor->LockWatchpoint(wp))
 	{
-		wp->SetLocationConditionData1(address);
-		wp->SetLocationConditionData2(address + size - 1);
-		wp->SetLocationCondition(size > 1 ? IWatchpoint::Condition::GreaterAndLess : IWatchpoint::Condition::Equal);
-		wp->SetOnRead(onRead);
-		wp->SetOnWrite(onWrite);
-		wp->SetBreakEvent(true);
-		wp->SetEnabled(true);
-		wp->SetName(wp->GenerateName());
-		processor->UnlockWatchpoint(wp);
+		// The new watchpoint could not be configured: remove it rather than leave a disabled entry behind
+		processor->DeleteWatchpoint(wp);
+		throw std::runtime_error("Failed to set watchpoint: could not lock the new watchpoint on " + deviceName);
 	}
+	wp->SetLocationConditionData1(address);
+	wp->SetLocationConditionData2(address + size - 1);
+	wp->SetLocationCondition(size > 1 ? IWatchpoint::Condition::GreaterAndLess : IWatchpoint::Condition::Equal);
+	wp->SetOnRead(onRead);
+	wp->SetOnWrite(onWrite);
+	wp->SetBreakEvent(true);
+	wp->SetEnabled(true);
+	wp->SetName(wp->GenerateName());
+	processor->UnlockWatchpoint(wp);
 
 	char addrStr[16];
 	snprintf(addrStr, sizeof(addrStr), "$%06X", address);
@@ -964,6 +995,9 @@ std::string MCPServer::ToolRemoveWatchpoint(const std::string& deviceName, unsig
 		if (wp->GetLocationConditionData1() == address)
 		{
 			processor->DeleteWatchpoint(wp);
+			std::list<IWatchpoint*> remaining = processor->GetWatchpointList();
+			if (std::find(remaining.begin(), remaining.end(), wp) != remaining.end())
+				throw std::runtime_error("Failed to remove watchpoint: it is still present on " + deviceName);
 			char addrStr[16];
 			snprintf(addrStr, sizeof(addrStr), "$%06X", address);
 			return "Watchpoint removed at " + std::string(addrStr);
@@ -1100,20 +1134,51 @@ std::string MCPServer::ToolReadSpriteTable()
 
 	unsigned int spriteTableBase = vdp->RegGetNameTableBaseSprite();
 
+	// The VDP walks the sprite list through the link fields starting at entry 0, and stops after a sprite whose link
+	// is 0 or points outside the table: 80 entries in H40 (RS1 set), 64 in H32.
+	const bool h40 = vdp->RegGetRS1();
+	const unsigned int tableSize = h40 ? 80 : 64;
+	std::vector<IS315_5313::SpriteMappingTableEntry> entries;
+	entries.reserve(tableSize);
+	for (unsigned int i = 0; i < tableSize; ++i)
+		entries.push_back(vdp->GetSpriteMappingTableEntry(spriteTableBase, i));
+	DebugLogic::SpriteChainResult chain = DebugLogic::WalkSpriteChain(tableSize, [&entries](unsigned int index) {
+		return entries[index].link;
+	});
+
 	std::string result;
-	result += "#    X      Y     W  H  Pat     Pal  Pri HF VF Link\n";
-	char line[128];
-	for (unsigned int i = 0; i < 80; ++i)
+	char line[160];
+	snprintf(line, sizeof(line), "Sprite list: %u sprite(s) in link order, %s (max %u), table base $%04X\n",
+		(unsigned int)chain.order.size(), h40 ? "H40" : "H32", tableSize, spriteTableBase);
+	result += line;
+	result += "#    Idx  X      Y     W  H  Pat     Pal  Pri HF VF Link\n";
+	for (size_t n = 0; n < chain.order.size(); ++n)
 	{
-		IS315_5313::SpriteMappingTableEntry s = vdp->GetSpriteMappingTableEntry(spriteTableBase, i);
-		snprintf(line, sizeof(line), "%-4u %-6u %-5u %ux%u $%03X   %u    %u   %u  %u  %u\n",
-			i, s.xpos, s.ypos, s.width, s.height, s.blockNumber,
+		unsigned int i = chain.order[n];
+		const IS315_5313::SpriteMappingTableEntry& s = entries[i];
+		snprintf(line, sizeof(line), "%-4u %-4u %-6u %-5u %ux%u $%03X   %u    %u   %u  %u  %u\n",
+			(unsigned int)n, i, s.xpos, s.ypos, s.width, s.height, s.blockNumber,
 			s.paletteLine, s.priority ? 1 : 0, s.hflip ? 1 : 0, s.vflip ? 1 : 0, s.link);
 		result += line;
+	}
 
-		// Stop at end of sprite list (link = 0 terminates, except for sprite 0)
-		if (i > 0 && s.link == 0)
-			break;
+	switch (chain.stop)
+	{
+	case DebugLogic::SpriteChainStop::LinkZero:
+		result += "End of list: link 0\n";
+		break;
+	case DebugLogic::SpriteChainStop::LinkOutOfRange:
+		snprintf(line, sizeof(line), "End of list: link %u is outside the %u-entry table\n", chain.stopLink, tableSize);
+		result += line;
+		break;
+	case DebugLogic::SpriteChainStop::Loop:
+		snprintf(line, sizeof(line), "Stopped: link %u points back to a sprite already listed (loop)\n", chain.stopLink);
+		result += line;
+		break;
+	case DebugLogic::SpriteChainStop::MaxCount:
+		snprintf(line, sizeof(line), "Stopped: maximum of %u sprites reached\n", tableSize);
+		result += line;
+		break;
 	}
 	return result;
 }

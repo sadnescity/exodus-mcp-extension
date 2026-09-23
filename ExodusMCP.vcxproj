@@ -93,6 +93,7 @@
     <ClCompile Include="src\MCPServer.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\DebugLogic.h" />
     <ClInclude Include="src\ExodusMCPExtension.h" />
     <ClInclude Include="src\MCPProtocol.h" />
     <ClInclude Include="src\MCPServer.h" />

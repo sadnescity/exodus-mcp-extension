@@ -97,7 +97,7 @@ No `device` parameter.
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `read_sprite_table` | — | Decode sprite attribute table (up to 80 sprites) |
+| `read_sprite_table` | — | Decode the sprite list following the link chain from sprite 0, as the VDP does (max 80 in H40, 64 in H32) |
 | `read_palette` | — | All 64 colors as 8-bit RGB |
 | `read_nametable` | `plane`, `row_start?`, `row_count?` | Decode plane nametable (a/b/window), 8 rows per call by default |
 | `read_vdp_state` | — | Full VDP configuration |
